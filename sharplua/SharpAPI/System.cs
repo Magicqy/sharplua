@@ -6,7 +6,7 @@ using System.Collections;
 
 static class SharpAPI_System
 {
-    public static void Register(LuaState lua)
+    internal static void Register(LuaState lua)
     {
         lua.RegistSharpLuaFunction(nameof(Exit), Exit);
         lua.RegistSharpLuaFunction(nameof(ReadKey), ReadKey);

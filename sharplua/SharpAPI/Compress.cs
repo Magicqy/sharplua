@@ -5,9 +5,9 @@ using System;
 using System.IO.Compression;
 using System.IO;
 
-public static class SharpAPI_Compress
+static class SharpAPI_Compress
 {
-    public static void Register(LuaState lua)
+    internal static void Register(LuaState lua)
     {
         lua.RegistSharpLuaFunction(nameof(Zip), Zip);
         lua.RegistSharpLuaFunction(nameof(UnZip), UnZip);

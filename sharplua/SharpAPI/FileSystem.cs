@@ -6,7 +6,7 @@ using KeraLua;
 
 static class SharpAPI_FileSystem
 {
-    public static void Register(LuaState lua)
+    internal static void Register(LuaState lua)
     {
         lua.RegistSharpLuaFunction(nameof(FileExists), FileExists);
         lua.RegistSharpLuaFunction(nameof(FileDelete), FileDelete);

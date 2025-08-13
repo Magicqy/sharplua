@@ -8,13 +8,13 @@ using System.Threading.Tasks;
 using KeraLua;
 using LuaState = KeraLua.Lua;
 
-internal class SharpAPI_Process
+class SharpAPI_Process
 {
 
     private static int batchId = 0;
     private static Dictionary<int, BatchProcess> batchMap = new Dictionary<int, BatchProcess>();
 
-    public static void Register(LuaState lua)
+    internal static void Register(LuaState lua)
     {
         lua.SharpLuaRegistFunction(nameof(StartProcess), StartProcess);
         lua.RegistSharpLuaFunction(nameof(CreateBatchProcess), CreateBatchProcess);

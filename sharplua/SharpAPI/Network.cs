@@ -12,7 +12,7 @@ using CommunityToolkit.HighPerformance;
 
 static class SharpAPI_Network
 {
-    public static void Register(LuaState lua)
+    internal static void Register(LuaState lua)
     {
         lua.SharpLuaRegistFunction(nameof(HttpRequest), HttpRequest);
         lua.SharpLuaRegistFunction(nameof(HttpDownload), HttpDownload);

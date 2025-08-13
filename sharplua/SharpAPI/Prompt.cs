@@ -5,9 +5,9 @@ using System;
 using Sharprompt;
 using System.Collections.Generic;
 
-public static class SharpAPI_Prompt
+static class SharpAPI_Prompt
 {
-    public static void Register(LuaState lua)
+    internal static void Register(LuaState lua)
     {
         Prompt.Culture = System.Globalization.CultureInfo.InvariantCulture;
         Prompt.ThrowExceptionOnCancel = true;

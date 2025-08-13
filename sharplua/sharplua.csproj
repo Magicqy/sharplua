@@ -19,6 +19,13 @@
     <MetadataUpdaterSupport>false</MetadataUpdaterSupport>
   </PropertyGroup>
   
+  <!-- 允许测试项目访问内部成员 -->
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+      <_Parameter1>sharplua.Tests</_Parameter1>
+    </AssemblyAttribute>
+  </ItemGroup>
+  
   <ItemGroup>
     <PackageReference Include="KeraLua" Version="1.3.4" />
     <PackageReference Include="Minio" Version="6.0.4" />

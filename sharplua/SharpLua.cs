@@ -8,11 +8,13 @@ using LuaState = KeraLua.Lua;
 
 public delegate int SharpLuaFunction(LuaState state);
 
-public static class SharpLua
+static class SharpLua
 {
+    public const string LibName = "sharplua";
     public const string Version = "0.7.0";
     public const int LUA_MULTRET = -1;
     private const int EXIT_CODE_ERROR = 1;
+
     private static void AddPackagePath(LuaState lua, string searchPath)
     {
         lua.GetGlobal("package");
@@ -60,14 +62,14 @@ public static class SharpLua
         SharpAPI_Prompt.Register(lua);
         SharpAPI_LuaState.Register(lua);
 
-        lua.SetGlobal("sharplua");
+        lua.SetGlobal(LibName);
     }
 
     public static int DoMain(string[] args)
     {
         if (args.Length <= 0)
         {
-            Console.Error.WriteLine($"sharplua version {Version}, usage: sharplua entry-lua-file-path");
+            Console.Error.WriteLine($"{LibName} version {Version}, usage: {LibName} entry-lua-file-path");
             return 1;
         }
 
@@ -78,15 +80,11 @@ public static class SharpLua
             return 1;
         }
 
-        var entryFullPath = Path.GetFullPath(entryFile);
-        var workingDir = Path.GetDirectoryName(entryFullPath);
-        //设置工作路径，与当前运行的entry文件同级
-        Directory.SetCurrentDirectory(workingDir);
-
         try
         {
-            using var lua = SharpLuaNewState();
-            if (SharpLuaDoFile(lua, entryFullPath, out var nResults))
+            var workingDir = Path.GetDirectoryName(entryFile);
+            using var lua = SharpLuaNewState(workingDir);
+            if (SharpLuaDoFile(lua, entryFile, out var nResults))
             {
                 if (nResults > 0)
                 {
@@ -108,8 +106,14 @@ public static class SharpLua
         }
     }
 
-    internal static LuaState SharpLuaNewState()
+    internal static LuaState SharpLuaNewState(string workingDir = null)
     {
+        if (workingDir != null)
+        {
+            //设置工作路径，与当前运行的entry文件同级
+            Directory.SetCurrentDirectory(workingDir);
+        }
+
         var lua = new LuaState();
         lua.Encoding = System.Text.Encoding.UTF8;
 
@@ -122,9 +126,10 @@ public static class SharpLua
 
     internal static bool SharpLuaDoFile(LuaState lua, string entryFilePath, out int nResults)
     {
+        var entryFullPath = Path.GetFullPath(entryFilePath);
         var top = lua.GetTop();
         lua.PushSharpLuaClosure(SharpLuaEntryFunc);
-        lua.PushString(entryFilePath);
+        lua.PushString(entryFullPath);
         var succ = lua.PCall(1, LUA_MULTRET, 0) == LuaStatus.OK;
         nResults = lua.GetTop() - top;
         return succ;
@@ -211,8 +216,8 @@ public static class SharpLua
         return 1;
     }
 
-    //provent registed lua function be collected by GC
-    static readonly System.Collections.Generic.HashSet<LuaFunction> registedFunctions = new System.Collections.Generic.HashSet<LuaFunction>();
+    //provent registed lua function be collected by GC, and use Concurrent to support multiple threading registration
+    static readonly System.Collections.Concurrent.ConcurrentBag<LuaFunction> registedFunctions = new ();
 
     private static void PushSharpLuaClosure(this LuaState lua, LuaFunction func)
     {
@@ -233,16 +238,16 @@ public static class SharpLua
             lua.PushBoolean(false);
             lua.Replace(LuaState.UpValueIndex(1));
             //C# Exception message is on top of the stack, return it to Lua as Error
-            var csExpMessage = lua.ToString(-1);
+            var errMsg = lua.ToString(-1);
             //luaL_error adds at the beginning of the message the file name and the line number where the error occurred, if this information is available.
-            return lua.Error("{0}", csExpMessage);
+            return lua.Error(errMsg);
         }
 
         return result;
     };
 }
 
-public static class SharpLuaExt
+static class SharpLuaExt
 {
     public static int PushTaskResult(this LuaState lua, Task task, string type)
     {

@@ -7,7 +7,7 @@ using System.Threading;
 
 static class SharpAPI_Task
 {
-    public static void Register(LuaState lua)
+    internal static void Register(LuaState lua)
     {
         lua.RegistSharpLuaFunction(nameof(TaskDelay), TaskDelay);
 

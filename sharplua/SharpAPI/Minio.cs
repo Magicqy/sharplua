@@ -20,7 +20,7 @@ static class SharpAPI_Minio
 
     private static DateTime StartTimeUTC = new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc);
 
-    public static void Register(LuaState lua)
+    internal static void Register(LuaState lua)
     {
         lua.RegistSharpLuaFunction(nameof(Minio_Init), Minio_Init);
         lua.RegistSharpLuaFunction(nameof(Minio_Dispose), Minio_Dispose);
