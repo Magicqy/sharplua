@@ -3,7 +3,7 @@ local JSON = require("modules.json")
 local StateTag = "MainState"
 local state = sharplua.LuaNewState()
 print(StateTag, "new state", state)
-print(StateTag, "new state do file", sharplua.LuaDoFile(state, "test-lua-state-sync.lua"))
+print(StateTag, "new state do file", sharplua.LuaDoFile(state, "test-lua/lua-state-sync.lua"))
 
 local function syncCbFunc(...)
     print(StateTag, "on recv", ...)

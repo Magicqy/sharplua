@@ -142,6 +142,10 @@ public static class SharpLuaState
         return succ;
     }
 
+    // 在NET中使用lua_error方法存在隐患，因为lua_error内部使用了long jump，方法调用后不会再返回
+    // 这个行为会破坏NET的函数调用栈，造成NET异常以及程序崩溃
+    // 运行时抛出System.Runtime.InteropServices.SEHException
+    // TODO：在NET中不可以使用原生的lua_error方法，需要使用替代方案在离开NET托管环境以后再调用lua_error，可以参考tolua/xlua在c代码中实现的包装函数的方案
     static LuaFunction SharpLuaEntryFunc = (IntPtr statePtr) =>
     {
         var lua = LuaState.FromIntPtr(statePtr);
