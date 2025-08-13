@@ -1,0 +1,48 @@
+﻿namespace SharpLua;
+
+using LuaState = KeraLua.Lua;
+using System;
+using System.IO.Compression;
+using System.IO;
+
+static class SharpAPI_Compress
+{
+    internal static void Register(LuaState lua)
+    {
+        lua.RegistSharpLuaFunction(nameof(Zip), Zip);
+        lua.RegistSharpLuaFunction(nameof(UnZip), UnZip);
+    }
+
+    static int Zip(LuaState lua)
+    {
+        var sourcePath = lua.ToString(1);
+        var targetPath = lua.ToString(2);
+        var compressLevel = lua.IsNumber(3) ? (CompressionLevel)lua.ToInteger(3) : CompressionLevel.Optimal;
+
+        if (File.Exists(sourcePath))
+        {
+            using (var fs = new FileStream(targetPath, FileMode.Create))
+            {
+                using (var arch = new ZipArchive(fs, ZipArchiveMode.Create))
+                {
+                    string entryName = Path.GetFileName(sourcePath);
+                    arch.CreateEntryFromFile(sourcePath, entryName, compressLevel);
+                }
+            }
+        }
+        else if (Directory.Exists(sourcePath))
+        {
+            var includeBaseDir = lua.IsBoolean(4) ? lua.ToBoolean(4) : true;
+            ZipFile.CreateFromDirectory(sourcePath, targetPath, compressLevel, includeBaseDir);
+        }
+        return 0;
+    }
+
+    static int UnZip(LuaState lua)
+    {
+        var zipPath = lua.ToString(1);
+        var dirPath = lua.ToString(2);
+        ZipFile.ExtractToDirectory(zipPath, dirPath, true);
+        return 0;
+    }
+}
