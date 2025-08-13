@@ -3,10 +3,14 @@
 using System;
 using System.IO;
 using System.Threading.Tasks;
+using System.Collections.Concurrent;
+using System.Runtime.InteropServices;
+using System.Runtime.CompilerServices;
 
 using LuaState = KeraLua.Lua;
 using LuaFunction = KeraLua.LuaFunction;
 using LuaStatus = KeraLua.LuaStatus;
+using LuaRegistry = KeraLua.LuaRegistry;
 
 public delegate int SharpLuaFunction(LuaState state);
 
@@ -15,7 +19,12 @@ public static class SharpLuaState
     public const string LibName = "sharplua";
     public const string Version = "0.7.0";
     public const int LUA_MULTRET = -1;
+    private const int EXIT_CODE_SUCCESS = 0;
     private const int EXIT_CODE_ERROR = 1;
+    private const string DEFAULT_ERROR_MESSAGE = "sharplua: unknown error";
+
+    // Track all GCHandles allocated for closures per Lua state (keyed by native handle)
+    private static readonly ConcurrentDictionary<IntPtr, ConcurrentBag<GCHandle>> s_stateHandles = new();
 
     private static void AddPackagePath(LuaState lua, string searchPath)
     {
@@ -77,38 +86,44 @@ public static class SharpLuaState
         if (args.Length <= 0)
         {
             Console.Error.WriteLine($"{LibName} version {Version}, usage: {LibName} entry-lua-file-path");
-            return 1;
+            return EXIT_CODE_ERROR;
         }
 
         var entryFile = Path.GetFullPath(args[0]);
         if (!File.Exists(entryFile))
         {
             Console.Error.WriteLine("entry file not exists: {0}", entryFile);
-            return 1;
+            return EXIT_CODE_ERROR;
         }
 
         try
         {
             var workingDir = Path.GetDirectoryName(entryFile);
             using var lua = NewState(workingDir);
-            if (DoFile(lua, entryFile, out var nResults))
+            try
             {
-                if (nResults > 0)
+                if (DoFile(lua, entryFile, out var nResults))
                 {
-                    return lua.IsInteger(-1) ? (int)lua.ToInteger(-1) : EXIT_CODE_ERROR;
+                    if (nResults > 0)
+                    {
+                        return lua.IsInteger(-1) ? (int)lua.ToInteger(-1) : EXIT_CODE_ERROR;
+                    }
+                    return EXIT_CODE_SUCCESS;
                 }
-                return 0;
+                else
+                {
+                    Console.Error.WriteLine(nResults > 0 ? lua.ToString(-1) : DEFAULT_ERROR_MESSAGE);
+                    return EXIT_CODE_ERROR;
+                }
             }
-            else
+            finally
             {
-                var error = lua.ToString(-1);
-                Console.WriteLine(error);
-                return EXIT_CODE_ERROR;
+                ReleaseSharpLuaHandles(lua);
             }
         }
         catch (Exception e)
         {
-            Console.WriteLine(e);
+            Console.Error.WriteLine(e);
             return EXIT_CODE_ERROR;
         }
     }
@@ -133,11 +148,11 @@ public static class SharpLuaState
 
     public static bool DoFile(LuaState lua, string entryFilePath, out int nResults)
     {
-        var entryFullPath = Path.GetFullPath(entryFilePath);
         var top = lua.GetTop();
-        lua.PushSharpLuaClosure(SharpLuaEntryFunc);
-        lua.PushString(entryFullPath);
-        var succ = lua.PCall(1, LUA_MULTRET, 0) == LuaStatus.OK;
+        var entryFullPath = Path.GetFullPath(entryFilePath);
+        var entryBuffer = LoadLuaFile(entryFullPath);
+        var succ = lua.LoadBuffer(entryBuffer, entryFullPath) == LuaStatus.OK
+            && lua.PCall(0, LUA_MULTRET, 0) == LuaStatus.OK;
         nResults = lua.GetTop() - top;
         return succ;
     }
@@ -160,7 +175,7 @@ public static class SharpLuaState
         }
         catch (Exception e)
         {
-            return SharpLuaError(lua, e);
+            return lua.SharpLuaError(e);
         }
     };
 
@@ -197,62 +212,123 @@ public static class SharpLuaState
     public static void RegistSharpLuaFunction(this LuaState lua, string name, SharpLuaFunction func)
     {
         lua.PushString(name);
-        lua.PushSharpLuaClosure((IntPtr statePtr) =>
-        {
-            var lua = LuaState.FromIntPtr(statePtr);
-            try
-            {
-                return func(lua);
-            }
-            catch (Exception e)
-            {
-                return SharpLuaError(lua, e);
-            }
-        });
+        lua.PushSharpLuaClosure(func);
         lua.SetTable(-3);
     }
 
-    static int SharpLuaError(LuaState lua, Exception e)
+    // 直接调用 Lua 原生 API
+    private static class NativeLuaMethods
     {
-        lua.PushBoolean(true);
-        lua.Replace(LuaState.UpValueIndex(1));
-        lua.PushString(e.ToString());
-        return 1;
-    }
+        private const string LuaLibraryName = "lua54";
 
-    //provent registed lua function be collected by GC, and use Concurrent to support multiple threading registration
-    static readonly System.Collections.Concurrent.ConcurrentBag<LuaFunction> registedFunctions = new ();
+        [DllImport(LuaLibraryName, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int lua_error(IntPtr luaState);
 
-    private static void PushSharpLuaClosure(this LuaState lua, LuaFunction func)
-    {
-        lua.PushBoolean(false);
-        lua.PushCFunction(func);
-        lua.PushCClosure(SharpLuaClosure, 2);
-        registedFunctions.Add(func);
-    }
+        // lua_tocfunction is not used in current design
 
-    // 包装函数将C#中的异常接入Lua的错误处理流程中去，将C#方法执行是否有异常的结果记录到第一个upvalue中
-    private static LuaFunction SharpLuaClosure = delegate (IntPtr statePtr)
-    {
-        var lua = LuaState.FromIntPtr(statePtr);
-        var func = lua.ToCFunction(LuaState.UpValueIndex(2));
-        int result = func(statePtr);
-        if (lua.ToBoolean(LuaState.UpValueIndex(1)))
+        [DllImport(LuaLibraryName, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern void lua_pushcclosure(IntPtr luaState, IntPtr func, int nupvalues);
+
+        [DllImport(LuaLibraryName, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern void lua_pushlightuserdata(IntPtr luaState, IntPtr p);
+
+        [DllImport(LuaLibraryName, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern IntPtr lua_touserdata(IntPtr luaState, int index);
+        internal static int lua_upvalueindex(int i)
         {
-            lua.PushBoolean(false);
-            lua.Replace(LuaState.UpValueIndex(1));
-            //C# Exception message is on top of the stack, return it to Lua as Error
-            var errMsg = lua.ToString(-1);
-            //luaL_error adds at the beginning of the message the file name and the line number where the error occurred, if this information is available.
-            return lua.Error(errMsg);
+            return (int)LuaRegistry.Index - i;
         }
+    }
 
-        return result;
-    };
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
+    static unsafe int SharpLuaClosure(IntPtr statePtr)
+    {
+        // Retrieve GCHandle to managed SharpLuaFunction from upvalue
+        var handlePtr = NativeLuaMethods.lua_touserdata(statePtr, NativeLuaMethods.lua_upvalueindex(1));
+        var handle = GCHandle.FromIntPtr(handlePtr);
+        var target = (SharpLuaFunction)handle.Target;
+
+        var lua = LuaState.FromIntPtr(statePtr);
+        try
+        {
+            var result = target(lua);
+            if (result < 0)
+            {
+                if (lua.GetTop() == 0)
+                {
+                    lua.PushString(DEFAULT_ERROR_MESSAGE);
+                }
+                return NativeLuaMethods.lua_error(statePtr);
+            }
+            else
+            {
+                return result;
+            }
+        }
+        catch (Exception e)
+        {
+            // Push error string and raise a Lua error (longjmp)
+            lua.PushString(e.ToString());
+            return NativeLuaMethods.lua_error(statePtr);
+        }
+    }
+
+    private static void PushSharpLuaClosure(this LuaState lua, SharpLuaFunction func)
+    {
+        // Capture the managed delegate via GCHandle in a Lua upvalue (as lightuserdata)
+        var handle = GCHandle.Alloc(func, GCHandleType.Normal);
+        NativeLuaMethods.lua_pushlightuserdata(lua.Handle, GCHandle.ToIntPtr(handle));
+
+        // Register handle for batch release when the Lua state is disposed/closed
+        var bag = s_stateHandles.GetOrAdd(lua.Handle, static _ => new ConcurrentBag<GCHandle>());
+        bag.Add(handle);
+
+        // 获取 SharpLuaClosure 的函数指针并创建闭包（带 1 个 upvalue: GCHandle 指针）
+        unsafe
+        {
+            delegate* unmanaged[Cdecl]<IntPtr, int> nativeClosurePtr = &SharpLuaClosure;
+            NativeLuaMethods.lua_pushcclosure(lua.Handle, (IntPtr)nativeClosurePtr, 1);
+        }
+    }
+
+    /// <summary>
+    /// Release all GCHandles registered for the given Lua state. Call on state dispose if you host SharpLua yourself.
+    /// </summary>
+    public static void ReleaseSharpLuaHandles(LuaState lua)
+    {
+        if (lua == null) return;
+        if (s_stateHandles.TryRemove(lua.Handle, out var bag))
+        {
+            while (bag.TryTake(out var h))
+            {
+                if (h.IsAllocated) h.Free();
+            }
+        }
+    }
 }
 
 static class SharpLuaExt
 {
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static int SharpLuaError(this LuaState lua)
+    {
+        //error already pushed to stack
+        return -1;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static int SharpLuaError(this LuaState lua, Exception e)
+    {
+        return lua.SharpLuaError(e.ToString());
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static int SharpLuaError(this LuaState lua, string message)
+    {
+        lua.PushString(message);
+        return -1;
+    }
+
     public static int PushTaskResult(this LuaState lua, Task task, string type)
     {
         //make sure the task is completed
