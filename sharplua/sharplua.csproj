@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <AllowUnsafeBlock>true</AllowUnsafeBlock>
+    <PublishSingleFile>true</PublishSingleFile>
+    <PublishSelfContained>true</PublishSelfContained>
+    <PublishTrimmed>true</PublishTrimmed>
+    <PublishRelease>true</PublishRelease>
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+    
+    <!-- 移除不必要的功能以减小体积 -->
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <EventSourceSupport>false</EventSourceSupport>
+    <UseSystemResourceKeys>true</UseSystemResourceKeys>
+    <HttpActivityPropagationSupport>false</HttpActivityPropagationSupport>
+    <MetadataUpdaterSupport>false</MetadataUpdaterSupport>
+  </PropertyGroup>
+  
+  <ItemGroup>
+    <PackageReference Include="KeraLua" Version="1.3.4" />
+    <PackageReference Include="Minio" Version="6.0.4" />
+    <PackageReference Include="Sharprompt" Version="2.4.5" />
+    <PackageReference Include="SuperSimpleTcp" Version="3.0.17" />
+  </ItemGroup>
+  
+  <!-- macOS 平台发布后将主程序重命名为 .mac -->
+  <Target Name="RenameMacOutput" AfterTargets="Publish">
+    <PropertyGroup>
+      <IsMac Condition="'$(RuntimeIdentifier)' == 'osx-arm64' Or '$(RuntimeIdentifier)' == 'osx-x64'">true</IsMac>
+      <PublishedExePath>$(PublishDir)$(AssemblyName)</PublishedExePath>
+      <MacTargetPath>$(PublishDir)$(AssemblyName).mac</MacTargetPath>
+    </PropertyGroup>
+    <Exec Condition="'$(IsMac)' == 'true' And Exists('$(PublishedExePath)')" Command="mv '$(PublishedExePath)' '$(MacTargetPath)'" />
+  </Target>
+
+  <!-- 发布后拷贝产物到项目根目录，覆盖同名文件 -->
+  <Target Name="CopyPublishToRoot" AfterTargets="RenameMacOutput">
+    <ItemGroup>
+      <PublishedFiles Include="$(PublishDir)**/*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(PublishedFiles)" DestinationFolder="$(MSBuildProjectDirectory)/.." SkipUnchangedFiles="false" OverwriteReadOnlyFiles="true" />
+  </Target>
+  
+</Project>
