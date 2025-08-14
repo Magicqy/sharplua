@@ -61,24 +61,26 @@ public static class SharpLuaState
         lua.SetTop(pkgIndex - 1);
     }
 
-    private static void OpenLibs(LuaState lua)
+    private static unsafe void OpenLibs(LuaState lua)
     {
         lua.OpenLibs();
 
         lua.NewTable();
         lua.SharpLuaRegistValue(nameof(Version), Version);
 
-        SharpAPI_System.Register(lua);
-        SharpAPI_FileSystem.Register(lua);
-        SharpAPI_Network.Register(lua);
-        SharpAPI_Minio.Register(lua);
-        SharpAPI_Compress.Register(lua);
-        SharpAPI_Process.Register(lua);
-        SharpAPI_Task.Register(lua);
-        SharpAPI_Prompt.Register(lua);
-        SharpAPI_LuaState.Register(lua);
+        // SharpAPI_System.Register(lua);
+        // SharpAPI_FileSystem.Register(lua);
+        // SharpAPI_Network.Register(lua);
+        // SharpAPI_Minio.Register(lua);
+        // SharpAPI_Compress.Register(lua);
+        // SharpAPI_Process.Register(lua);
+        // SharpAPI_Task.Register(lua);
+        // SharpAPI_Prompt.Register(lua);
+        // SharpAPI_LuaState.Register(lua);
 
         lua.SetGlobal(LibName);
+
+        SharpLuaRegisterLuaAPIs(lua);
     }
 
     public static int DoMain(string[] args)
@@ -219,76 +221,89 @@ public static class SharpLuaState
     // 直接调用 Lua 原生 API
     private static class NativeLuaMethods
     {
-        private const string LuaLibraryName = "lua54";
-
-        [DllImport(LuaLibraryName, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int lua_error(IntPtr luaState);
-
-        // lua_tocfunction is not used in current design
-
-        [DllImport(LuaLibraryName, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern void lua_pushcclosure(IntPtr luaState, IntPtr func, int nupvalues);
-
-        [DllImport(LuaLibraryName, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern void lua_pushlightuserdata(IntPtr luaState, IntPtr p);
-
-        [DllImport(LuaLibraryName, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr lua_touserdata(IntPtr luaState, int index);
         internal static int lua_upvalueindex(int i)
         {
             return (int)LuaRegistry.Index - i;
         }
+            
+        [DllImport("bridge", CallingConvention = CallingConvention.Cdecl)]
+        public static extern void RegistLuaFunc(IntPtr[] func_ptrs, uint len);
+
+        [DllImport("bridge", CallingConvention = CallingConvention.Cdecl)]
+        public static extern void TestLuaFunc(IntPtr L);
+
+        [DllImport("bridge", CallingConvention = CallingConvention.Cdecl)]
+        public static extern void PushSharpLuaFunc(IntPtr luaState);
     }
 
-    [UnmanagedCallersOnly(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
-    static unsafe int SharpLuaClosure(IntPtr statePtr)
+    static unsafe void SharpLuaRegisterLuaAPIs(LuaState lua)
     {
-        // Retrieve GCHandle to managed SharpLuaFunction from upvalue
-        var handlePtr = NativeLuaMethods.lua_touserdata(statePtr, NativeLuaMethods.lua_upvalueindex(1));
-        var handle = GCHandle.FromIntPtr(handlePtr);
-        var target = (SharpLuaFunction)handle.Target;
+        IntPtr hLua = NativeLibrary.Load("lua54.dll");
+        IntPtr[] funcPtrs = {
+            NativeLibrary.GetExport(hLua, "lua_pushnil"),
+            NativeLibrary.GetExport(hLua, "lua_pushcclosure"),
+            NativeLibrary.GetExport(hLua, "lua_tocclosure"),
+            NativeLibrary.GetExport(hLua, "lua_error"),
+        };
+        NativeLuaMethods.RegistLuaFunc(funcPtrs, (uint)funcPtrs.Length);
 
-        var lua = LuaState.FromIntPtr(statePtr);
-        try
+        
+        var top = lua.GetTop();
+        NativeLuaMethods.TestLuaFunc(lua.Handle);
+        var diff = lua.GetTop() - top;
+        Console.WriteLine($"TestLuaFunc pushed {diff} values, old top: {top}");
+        if (diff > 0)
         {
-            var result = target(lua);
-            if (result < 0)
-            {
-                if (lua.GetTop() == 0)
-                {
-                    lua.PushString(DEFAULT_ERROR_MESSAGE);
-                }
-                return NativeLuaMethods.lua_error(statePtr);
-            }
-            else
-            {
-                return result;
-            }
-        }
-        catch (Exception e)
-        {
-            // Push error string and raise a Lua error (longjmp)
-            lua.PushString(e.ToString());
-            return NativeLuaMethods.lua_error(statePtr);
+            var ttype = lua.Type(-1);
+            Console.WriteLine($"TestLuaFunc pushed type {ttype}");
         }
     }
+
+    // [UnmanagedCallersOnly(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
+    // static unsafe int SharpLuaClosure(IntPtr statePtr)
+    // {
+    //     // Retrieve GCHandle to managed SharpLuaFunction from upvalue
+    //     var handlePtr = NativeLuaMethods.lua_touserdata(statePtr, NativeLuaMethods.lua_upvalueindex(1));
+    //     var handle = GCHandle.FromIntPtr(handlePtr);
+    //     var target = (SharpLuaFunction)handle.Target;
+
+    //     var lua = LuaState.FromIntPtr(statePtr);
+    //     try
+    //     {
+    //         var result = target(lua);
+    //         if (result < 0)
+    //         {
+    //             if (lua.GetTop() == 0)
+    //             {
+    //                 lua.PushString(DEFAULT_ERROR_MESSAGE);
+    //             }
+    //             return NativeLuaMethods.lua_error(statePtr);
+    //         }
+    //         else
+    //         {
+    //             return result;
+    //         }
+    //     }
+    //     catch (Exception e)
+    //     {
+    //         // Push error string and raise a Lua error (longjmp)
+    //         lua.PushString(e.ToString());
+    //         return NativeLuaMethods.lua_error(statePtr);
+    //     }
+    // }
 
     private static void PushSharpLuaClosure(this LuaState lua, SharpLuaFunction func)
     {
         // Capture the managed delegate via GCHandle in a Lua upvalue (as lightuserdata)
         var handle = GCHandle.Alloc(func, GCHandleType.Normal);
-        NativeLuaMethods.lua_pushlightuserdata(lua.Handle, GCHandle.ToIntPtr(handle));
 
         // Register handle for batch release when the Lua state is disposed/closed
         var bag = s_stateHandles.GetOrAdd(lua.Handle, static _ => new ConcurrentBag<GCHandle>());
         bag.Add(handle);
 
-        // 获取 SharpLuaClosure 的函数指针并创建闭包（带 1 个 upvalue: GCHandle 指针）
-        unsafe
-        {
-            delegate* unmanaged[Cdecl]<IntPtr, int> nativeClosurePtr = &SharpLuaClosure;
-            NativeLuaMethods.lua_pushcclosure(lua.Handle, (IntPtr)nativeClosurePtr, 1);
-        }
+        var funcPtr = Marshal.GetFunctionPointerForDelegate(func);
+        NativeLuaMethods.lua_pushcclosure(lua.Handle, funcPtr, 0);
+        NativeLuaMethods.PushSharpLuaFunc(lua.Handle);
     }
 
     /// <summary>

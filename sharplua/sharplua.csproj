@@ -18,6 +18,12 @@
     <HttpActivityPropagationSupport>false</HttpActivityPropagationSupport>
     <MetadataUpdaterSupport>false</MetadataUpdaterSupport>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\bridge.dll">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
   
   <ItemGroup>
     <PackageReference Include="KeraLua" Version="1.3.4" />
