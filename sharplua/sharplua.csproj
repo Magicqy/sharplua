@@ -11,9 +11,6 @@
     <DebugType>none</DebugType>
     <DebugSymbols>false</DebugSymbols>
     
-    <!-- 临时禁用 NativeAOT，先修复代码结构 -->
-    <PublishAot>true</PublishAot>
-    
     <!-- 移除不必要的功能以减小体积 -->
     <InvariantGlobalization>true</InvariantGlobalization>
     <EventSourceSupport>false</EventSourceSupport>
