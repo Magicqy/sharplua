@@ -47,8 +47,4 @@ test.assert_type("string", "hello", "String literal should have string type")
 test.assert_type("number", 42, "Number literal should have number type")
 test.assert_type("boolean", true, "Boolean literal should have boolean type")
 
--- 测试错误信息传递
-print("Testing error message propagation...")
-test.assert_not_nil(sharplua.NonExistentProperty, "This property should not exist - testing error message propagation")
-
 print("Basic test completed successfully - All assertions passed!")

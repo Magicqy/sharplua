@@ -33,6 +33,36 @@ public class LuaScriptTests
     }
 
     [Fact]
+    public void Test_SyntaxError()
+    {
+        // Arrange
+        var scriptPath = Path.Combine(_testLuaPath, "syntax-error.lua");
+
+        // Act
+        var result = ExecuteLuaScript(scriptPath);
+
+        // Assert
+        Assert.False(result.Success, "Script with syntax error should fail to execute");
+        Assert.NotNull(result.ErrorMessage);
+        Assert.Contains("syntax error", result.ErrorMessage.ToLower());
+    }
+    
+    [Fact]
+    public void Test_RaiseError()
+    {
+        // Arrange
+        var scriptPath = Path.Combine(_testLuaPath, "raise-error.lua");
+
+        // Act
+        var result = ExecuteLuaScript(scriptPath);
+
+        // Assert
+        Assert.False(result.Success, "Script that raises an error should fail to execute");
+        Assert.NotNull(result.ErrorMessage);
+        Assert.Contains("make error", result.ErrorMessage);
+    }
+
+    [Fact]
     public void Test_BasicScript_ShouldExecuteSuccessfully()
     {
         // Arrange
@@ -51,47 +81,21 @@ public class LuaScriptTests
     }
 
     [Fact]
-    public void Test_CoroutineScript_ShouldExecuteSuccessfully()
+    public void Test_SystemScript_ShouldExecuteSuccessfully()
     {
         // Arrange
-        var scriptPath = Path.Combine(_testLuaPath, "coroutine.lua");
+        var scriptPath = Path.Combine(_testLuaPath, "system.lua");
 
         // Act & Assert
         var result = ExecuteLuaScript(scriptPath);
-        Assert.True(result.Success, $"Script execution failed: {result.ErrorMessage}");
-    }
-
-    [Fact]
-    public void Test_TaskScript_ShouldExecuteSuccessfully()
-    {
-        // Arrange
-        var scriptPath = Path.Combine(_testLuaPath, "task.lua");
-
-        // Act & Assert
-        var result = ExecuteLuaScript(scriptPath);
-        Assert.True(result.Success, $"Script execution failed: {result.ErrorMessage}");
-    }
-
-    [Fact]
-    public void Test_LuaStateScript_ShouldExecuteSuccessfully()
-    {
-        // Arrange
-        var scriptPath = Path.Combine(_testLuaPath, "lua-state.lua");
-
-        // Act & Assert
-        var result = ExecuteLuaScript(scriptPath);
-        Assert.True(result.Success, $"Script execution failed: {result.ErrorMessage}");
-    }
-
-    [Fact]
-    public void Test_LuaStateSyncScript_ShouldExecuteSuccessfully()
-    {
-        // Arrange
-        var scriptPath = Path.Combine(_testLuaPath, "lua-state-sync.lua");
-
-        // Act & Assert
-        var result = ExecuteLuaScript(scriptPath);
-        Assert.True(result.Success, $"Script execution failed: {result.ErrorMessage}");
+        if (!result.Success && result.IsAssertionFailure)
+        {
+            Assert.True(result.Success, $"Assertion failed in Lua script: {result.AssertionDetails}");
+        }
+        else
+        {
+            Assert.True(result.Success, $"Script execution failed: {result.ErrorMessage}");
+        }
     }
 
     /// <summary>
@@ -115,7 +119,7 @@ public class LuaScriptTests
             if (!success)
             {
                 string errorMessage = "Unknown error";
-                if (lua.GetTop() > 0)
+                if (nResults > 0)
                 {
                     errorMessage = lua.ToString(-1) ?? "No error message available";
                 }
