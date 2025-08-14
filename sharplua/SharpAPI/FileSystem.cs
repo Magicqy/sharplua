@@ -1,8 +1,7 @@
-﻿namespace SharpLua;
+namespace SharpLua;
 
 using LuaState = KeraLua.Lua;
 using System;
-using KeraLua;
 
 static class SharpAPI_FileSystem
 {
@@ -28,219 +27,124 @@ static class SharpAPI_FileSystem
         lua.RegistSharpLuaFunction(nameof(DirectoryGetDirs), DirectoryGetDirs);
     }
 
-    static int FileExists(IntPtr statePtr)
+    static int FileExists(LuaState lua)
     {
-        var lua = LuaState.FromIntPtr(statePtr);
-        try
-        {
-            var path = lua.ToString(1);
-            var exists = System.IO.File.Exists(path);
-            lua.PushBoolean(exists);
-            return 1;
-        }
-        catch (Exception e)
-        {
-            return lua.SharpLuaError(e);
-        }
+        var path = lua.ToString(1);
+        var exists = System.IO.File.Exists(path);
+        lua.PushBoolean(exists);
+        return 1;
     }
 
-    static int FileDelete(IntPtr statePtr)
+    static int FileDelete(LuaState lua)
     {
-        var lua = LuaState.FromIntPtr(statePtr);
-        try
+        var path = lua.ToString(1);
+        if (System.IO.File.Exists(path))
         {
-            var path = lua.ToString(1);
-            if (System.IO.File.Exists(path))
-            {
-                System.IO.File.Delete(path);
-            }
-            return 0;
+            System.IO.File.Delete(path);
         }
-        catch (Exception e)
-        {
-            return lua.SharpLuaError(e);
-        }
+        return 0;
     }
 
-    static int DirectoryCreate(IntPtr statePtr)
+    static int DirectoryCreate(LuaState lua)
     {
-        var lua = LuaState.FromIntPtr(statePtr);
-        try
+        var path = lua.ToString(1);
+        if (!System.IO.Directory.Exists(path))
         {
-            var path = lua.ToString(1);
-            if (!System.IO.Directory.Exists(path))
-            {
-                System.IO.Directory.CreateDirectory(path);
-            }
-            return 0;
+            System.IO.Directory.CreateDirectory(path);
         }
-        catch (Exception e)
-        {
-            return lua.SharpLuaError(e);
-        }
+        return 0;
     }
 
-    static int DirectoryDelete(IntPtr statePtr)
+    static int DirectoryDelete(LuaState lua)
     {
-        var lua = LuaState.FromIntPtr(statePtr);
-        try
+        var path = lua.ToString(1);
+        var recursive = lua.ToBoolean(2);
+        if (System.IO.Directory.Exists(path))
         {
-            var path = lua.ToString(1);
-            var recursive = lua.ToBoolean(2);
-            if (System.IO.Directory.Exists(path))
-            {
-                System.IO.Directory.Delete(path, recursive);
-            }
-            return 0;
+            System.IO.Directory.Delete(path, recursive);
         }
-        catch (Exception e)
-        {
-            return lua.SharpLuaError(e);
-        }
+        return 0;
     }
 
-    static int DirectoryExists(IntPtr statePtr)
+    static int DirectoryExists(LuaState lua)
     {
-        var lua = LuaState.FromIntPtr(statePtr);
-        try
-        {
-            var path = lua.ToString(1);
-            var exists = System.IO.Directory.Exists(path);
-            lua.PushBoolean(exists);
-            return 1;
-        }
-        catch (Exception e)
-        {
-            return lua.SharpLuaError(e);
-        }
+        var path = lua.ToString(1);
+        var exists = System.IO.Directory.Exists(path);
+        lua.PushBoolean(exists);
+        return 1;
     }
 
-    static int DirectoryGetCurrent(IntPtr statePtr)
+    static int DirectoryGetCurrent(LuaState lua)
     {
-        var lua = LuaState.FromIntPtr(statePtr);
-        try
-        {
-            var path = System.IO.Directory.GetCurrentDirectory();
-            lua.PushString(path);
-            return 1;
-        }
-        catch (Exception e)
-        {
-            return lua.SharpLuaError(e);
-        }
+        var path = System.IO.Directory.GetCurrentDirectory();
+        lua.PushString(path);
+        return 1;
     }
 
-    static int DirectorySetCurrent(IntPtr statePtr)
+    static int DirectorySetCurrent(LuaState lua)
     {
-        var lua = LuaState.FromIntPtr(statePtr);
-        try
-        {
-            var path = lua.ToString(1);
-            System.IO.Directory.SetCurrentDirectory(path);
-            return 0;
-        }
-        catch (Exception e)
-        {
-            return lua.SharpLuaError(e);
-        }
+        var path = lua.ToString(1);
+        System.IO.Directory.SetCurrentDirectory(path);
+        return 0;
     }
 
-    static int DirectoryMove(IntPtr statePtr)
+    static int DirectoryMove(LuaState lua)
     {
-        var lua = LuaState.FromIntPtr(statePtr);
-        try
-        {
-            var srcPath = lua.ToString(1);
-            var destPath = lua.ToString(2);
-            System.IO.Directory.Move(srcPath, destPath);
-            return 0;
-        }
-        catch (Exception e)
-        {
-            return lua.SharpLuaError(e);
-        }
+        var srcPath = lua.ToString(1);
+        var destPath = lua.ToString(2);
+        System.IO.Directory.Move(srcPath, destPath);
+        return 0;
     }
 
-    static int FileCopy(IntPtr statePtr)
+    static int FileCopy(LuaState lua)
     {
-        var lua = LuaState.FromIntPtr(statePtr);
-        try
+        var srcPath = lua.ToString(1);
+        var tarPath = lua.ToString(2);
+        var overwrite = false;
+        if (lua.GetTop() > 2)
         {
-            var srcPath = lua.ToString(1);
-            var tarPath = lua.ToString(2);
-            var overwrite = false;
-            if (lua.GetTop() > 2)
-            {
-                overwrite = lua.ToBoolean(3);
-            }
-            System.IO.File.Copy(srcPath, tarPath, overwrite);
-            return 0;
+            overwrite = lua.ToBoolean(3);
         }
-        catch (Exception e)
-        {
-            return lua.SharpLuaError(e);
-        }
+        System.IO.File.Copy(srcPath, tarPath, overwrite);
+        return 0;
     }
 
-    static int FileMove(IntPtr statePtr)
+    static int FileMove(LuaState lua)
     {
-        var lua = LuaState.FromIntPtr(statePtr);
-        try
+        var srcPath = lua.ToString(1);
+        var tarPath = lua.ToString(2);
+        var overwrite = false;
+        if (lua.GetTop() > 2)
         {
-            var srcPath = lua.ToString(1);
-            var tarPath = lua.ToString(2);
-            var overwrite = false;
-            if (lua.GetTop() > 2)
-            {
-                overwrite = lua.ToBoolean(3);
-            }
-            System.IO.File.Move(srcPath, tarPath, overwrite);
-            return 0;
+            overwrite = lua.ToBoolean(3);
         }
-        catch (Exception e)
-        {
-            return lua.SharpLuaError(e);
-        }
+        System.IO.File.Move(srcPath, tarPath, overwrite);
+        return 0;
     }
 
-    static int FileGetSize(IntPtr statePtr)
+    static int FileGetSize(LuaState lua)
     {
-        var lua = LuaState.FromIntPtr(statePtr);
-        try
-        {
-            var path = lua.ToString(1);
-            var size = new System.IO.FileInfo(path).Length;
-            lua.PushInteger(size);
-            return 1;
-        }
-        catch (Exception e)
-        {
-            return lua.SharpLuaError(e);
-        }
+        var path = lua.ToString(1);
+        var size = new System.IO.FileInfo(path).Length;
+        lua.PushInteger(size);
+        return 1;
     }
 
-    static int DirectoryCopy(IntPtr statePtr)
+    static int DirectoryCopy(LuaState lua)
     {
-        var lua = LuaState.FromIntPtr(statePtr);
-        try
-        {
-            var srcDirPath = lua.ToString(1);
-            var tarDirPath = lua.ToString(2);
-            InternalDirectoryCopy(srcDirPath, tarDirPath);
-            return 0;
-        }
-        catch (Exception e)
-        {
-            return lua.SharpLuaError(e);
-        }
+        var srcDirPath = lua.ToString(1);
+        var tarDirPath = lua.ToString(2);
+        InternalDirectoryCopy(srcDirPath, tarDirPath);
+        return 0;
     }
+
     private static void InternalDirectoryCopy(string sourceFolder, string destFolder)
     {
         if (!System.IO.Directory.Exists(sourceFolder)) return;
         string folderName = System.IO.Path.GetFileName(sourceFolder);
         string destfolderdir = System.IO.Path.Combine(destFolder, folderName);
         string[] filenames = System.IO.Directory.GetFileSystemEntries(sourceFolder);
-        foreach (string file in filenames)// 遍历所有的文件和目录
+        foreach (string file in filenames)// �������е��ļ���Ŀ¼
         {
             if (System.IO.Directory.Exists(file))
             {
@@ -263,147 +167,107 @@ static class SharpAPI_FileSystem
         }
     }
 
-    static LuaFunction FileReadAllText = delegate (IntPtr statePtr)
+    static int FileReadAllText(LuaState lua)
     {
-        var lua = LuaState.FromIntPtr(statePtr);
-        try
+        var path = lua.ToString(1);
+        var text = System.IO.File.ReadAllText(path);
+        if (text != null)
         {
-            var path = lua.ToString(1);
-            var text = System.IO.File.ReadAllText(path);
-            if (text != null)
+            lua.PushString(text);
+        }
+        else
+        {
+            lua.PushNil();
+        }
+        return 1;
+    }
+
+    static int FileWriteAllText(LuaState lua)
+    {
+        var path = lua.ToString(1);
+        var contents = lua.ToString(2);
+        var append = false;
+        if (lua.GetTop() > 2)
+        {
+            append = lua.ToBoolean(3);
+        }
+        if (append)
+        {
+            System.IO.File.AppendAllText(path, contents);
+        }
+        else
+        {
+            System.IO.File.WriteAllText(path, contents);
+        }
+        return 0;
+    }
+
+    static int FileComputeMD5(LuaState lua)
+    {
+        var path = lua.ToString(1);
+        using (var fs = new System.IO.FileStream(path, System.IO.FileMode.Open, System.IO.FileAccess.Read))
+        {
+            System.Security.Cryptography.MD5 md5 = System.Security.Cryptography.MD5.Create();
+            byte[] hash = md5.ComputeHash(fs);
+            var sb = new System.Text.StringBuilder();
+            foreach (byte b in hash)
             {
-                lua.PushString(text);
+                sb.Append(b.ToString("x2"));
             }
-            else
-            {
-                lua.PushNil();
-            }
+            lua.PushString(sb.ToString());
             return 1;
-        }
-        catch (Exception e)
-        {
-            return lua.SharpLuaError(e);
-        }
-    };
-
-    static LuaFunction FileWriteAllText = delegate (IntPtr statePtr)
-    {
-        var lua = LuaState.FromIntPtr(statePtr);
-        try
-        {
-            var path = lua.ToString(1);
-            var contents = lua.ToString(2);
-            var append = false;
-            if (lua.GetTop() > 2)
-            {
-                append = lua.ToBoolean(3);
-            }
-            if (append)
-            {
-                System.IO.File.AppendAllText(path, contents);
-            }
-            else
-            {
-                System.IO.File.WriteAllText(path, contents);
-            }
-            return 0;
-        }
-        catch (Exception e)
-        {
-            return lua.SharpLuaError(e);
-        }
-    };
-
-    static LuaFunction FileComputeMD5 = delegate (IntPtr statePtr)
-    {
-        var lua = LuaState.FromIntPtr(statePtr);
-        try
-        {
-            var path = lua.ToString(1);
-            using (var fs = new System.IO.FileStream(path, System.IO.FileMode.Open, System.IO.FileAccess.Read, System.IO.FileShare.Read))
-            {
-                System.Security.Cryptography.MD5 md5 = System.Security.Cryptography.MD5.Create();
-                byte[] hash = md5.ComputeHash(fs);
-                var sb = new System.Text.StringBuilder();
-                foreach (byte b in hash)
-                {
-                    sb.Append(b.ToString("x2"));
-                }
-                lua.PushString(sb.ToString());
-                return 1;
-            }
-        }
-        catch (Exception e)
-        {
-            return lua.SharpLuaError(e);
-        }
-    };
-
-    static int DirectoryGetFiles(IntPtr statePtr)
-    {
-        var lua = LuaState.FromIntPtr(statePtr);
-        try
-        {
-            var path = lua.ToString(1);
-            var searchPattern = lua.ToString(2);
-            var searchTopDirOnly = lua.ToBoolean(3);
-            if (lua.GetTop() == 3)
-            {
-                lua.NewTable();
-            }
-            else
-            {
-                if (lua.IsTable(4) == false)
-                {
-                    throw new ArgumentException("invalid argument type, table expected.");
-                }
-            }
-            var files = System.IO.Directory.EnumerateFiles(path, searchPattern, searchTopDirOnly ? System.IO.SearchOption.TopDirectoryOnly : System.IO.SearchOption.AllDirectories);
-            var index = 1;
-            foreach (var item in files)
-            {
-                lua.PushString(item);
-                lua.RawSetInteger(4, index++);
-            }
-            return 1;
-        }
-        catch (Exception e)
-        {
-            return lua.SharpLuaError(e);
         }
     }
 
-    static int DirectoryGetDirs(IntPtr statePtr)
+    static int DirectoryGetFiles(LuaState lua)
     {
-        var lua = LuaState.FromIntPtr(statePtr);
-        try
+        var path = lua.ToString(1);
+        var searchPattern = lua.ToString(2);
+        var searchTopDirOnly = lua.ToBoolean(3);
+        if (lua.GetTop() == 3)
         {
-            var path = lua.ToString(1);
-            var searchPattern = lua.ToString(2);
-            var searchTopDirOnly = lua.ToBoolean(3);
-            if (lua.GetTop() == 3)
-            {
-                lua.NewTable();
-            }
-            else
-            {
-                if (lua.IsTable(4) == false)
-                {
-                    throw new ArgumentException("invalid argument type, table expected.");
-                }
-            }
-            var dirs = System.IO.Directory.GetDirectories(path, searchPattern, searchTopDirOnly ? System.IO.SearchOption.TopDirectoryOnly : System.IO.SearchOption.AllDirectories);
-            var index = 1;
-            foreach (var item in dirs)
-            {
-                lua.PushString(item);
-                lua.RawSetInteger(4, index++);
-            }
-            return 1;
+            lua.NewTable();
         }
-        catch (Exception e)
+        else
         {
-            return lua.SharpLuaError(e);
+            if (lua.IsTable(4) == false)
+            {
+                throw new ArgumentException("invalid argument type, table expected.");
+            }
         }
+        var files = System.IO.Directory.EnumerateFiles(path, searchPattern, searchTopDirOnly ? System.IO.SearchOption.TopDirectoryOnly : System.IO.SearchOption.AllDirectories);
+        var index = 1;
+        foreach (var item in files)
+        {
+            lua.PushString(item);
+            lua.RawSetInteger(4, index++);
+        }
+        return 1;
+    }
+
+    static int DirectoryGetDirs(LuaState lua)
+    {
+        var path = lua.ToString(1);
+        var searchPattern = lua.ToString(2);
+        var searchTopDirOnly = lua.ToBoolean(3);
+        if (lua.GetTop() == 3)
+        {
+            lua.NewTable();
+        }
+        else
+        {
+            if (lua.IsTable(4) == false)
+            {
+                throw new ArgumentException("invalid argument type, table expected.");
+            }
+        }
+        var dirs = System.IO.Directory.GetDirectories(path, searchPattern, searchTopDirOnly ? System.IO.SearchOption.TopDirectoryOnly : System.IO.SearchOption.AllDirectories);
+        var index = 1;
+        foreach (var item in dirs)
+        {
+            lua.PushString(item);
+            lua.RawSetInteger(4, index++);
+        }
+        return 1;
     }
 }

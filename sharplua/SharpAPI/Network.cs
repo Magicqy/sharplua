@@ -14,16 +14,16 @@ static class SharpAPI_Network
 {
     internal static void Register(LuaState lua)
     {
-        lua.SharpLuaRegistFunction(nameof(HttpRequest), HttpRequest);
-        lua.SharpLuaRegistFunction(nameof(HttpDownload), HttpDownload);
+        lua.RegistSharpLuaFunction(nameof(HttpRequest), HttpRequest);
+        lua.RegistSharpLuaFunction(nameof(HttpDownload), HttpDownload);
 
-        lua.SharpLuaRegistFunction(nameof(TcpClientStart), TcpClientStart);
-        lua.SharpLuaRegistFunction(nameof(TcpClientDispose), TcpClientDispose);
-        lua.SharpLuaRegistFunction(nameof(TcpClientSend), TcpClientSend);
-        lua.SharpLuaRegistFunction(nameof(TcpServerStart), TcpServerStart);
-        lua.SharpLuaRegistFunction(nameof(TcpServerDispose), TcpServerDispose);
-        lua.SharpLuaRegistFunction(nameof(TcpServerSend), TcpServerSend);
-        lua.SharpLuaRegistFunction(nameof(TcpProcessEvent), TcpProcessEvent);
+        lua.RegistSharpLuaFunction(nameof(TcpClientStart), TcpClientStart);
+        lua.RegistSharpLuaFunction(nameof(TcpClientDispose), TcpClientDispose);
+        lua.RegistSharpLuaFunction(nameof(TcpClientSend), TcpClientSend);
+        lua.RegistSharpLuaFunction(nameof(TcpServerStart), TcpServerStart);
+        lua.RegistSharpLuaFunction(nameof(TcpServerDispose), TcpServerDispose);
+        lua.RegistSharpLuaFunction(nameof(TcpServerSend), TcpServerSend);
+        lua.RegistSharpLuaFunction(nameof(TcpProcessEvent), TcpProcessEvent);
 
         lua.SharpLuaRegistValue(nameof(TcpSendTypeBytes), TcpSendTypeBytes);
         lua.SharpLuaRegistValue(nameof(TcpSendTypeUTF8String), TcpSendTypeUTF8String);

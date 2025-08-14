@@ -7,10 +7,10 @@ class SharpAPI_LuaState
 {
     internal static void Register(LuaState lua)
     {
-        lua.SharpLuaRegistFunction(nameof(LuaNewState), LuaNewState);
-        lua.SharpLuaRegistFunction(nameof(LuaCloseState), LuaCloseState);
-        lua.SharpLuaRegistFunction(nameof(LuaDoFile), LuaDoFile);
-        lua.SharpLuaRegistFunction(nameof(LuaSyncState), LuaSyncState);
+        lua.RegistSharpLuaFunction(nameof(LuaNewState), LuaNewState);
+        lua.RegistSharpLuaFunction(nameof(LuaCloseState), LuaCloseState);
+        lua.RegistSharpLuaFunction(nameof(LuaDoFile), LuaDoFile);
+        lua.RegistSharpLuaFunction(nameof(LuaSyncState), LuaSyncState);
     }
 
     static int LuaNewState(LuaState lua)

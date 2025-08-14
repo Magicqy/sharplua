@@ -37,412 +37,316 @@ static class SharpAPI_Minio
 
     //功能：初始化，需要提供服务器地址和密钥参数
     //lua调用示例: sharplua.Minio_Init(endPoint, accessKey, secretKey)
-    static int Minio_Init(IntPtr statePtr)
+    static int Minio_Init(LuaState lua)
     {
-        var lua = LuaState.FromIntPtr(statePtr);
-        try
-        {
-            var endPoint = lua.ToString(1);
-            var accessKey = lua.ToString(2);
-            var secretKey = lua.ToString(3);
-            instance = new MinioInstance(endPoint, accessKey, secretKey);
-            return 0;
-        }
-        catch (Exception e)
-        {
-            return lua.SharpLuaError(e);
-        }
+        var endPoint = lua.ToString(1);
+        var accessKey = lua.ToString(2);
+        var secretKey = lua.ToString(3);
+        instance = new MinioInstance(endPoint, accessKey, secretKey);
+        return 0;
     }
 
-    static int Minio_Dispose(IntPtr statePtr)
+    static int Minio_Dispose(LuaState lua)
     {
-        var lua = LuaState.FromIntPtr(statePtr);
-        try
+        if (instance != null)
         {
-            if (instance != null)
-            {
-                instance.Dispose();
-                instance = null;
-            }
-            return 0;
+            instance.Dispose();
+            instance = null;
         }
-        catch (Exception e)
-        {
-            return lua.SharpLuaError(e);
-        }
+        return 0;
     }
 
     //功能：上传文件（同名则直接替换）
     //lua调用示例: sharplua.Minio_UploadFile(bucketName, srcPath, tarPath)
     //调用结果: Minio远端会添加bucketName/tarPath,tarPath相当于是objName
     //注意：bucket只包含小写字母、数字和短横线（-），不支持其他字符;同名文件会直接覆盖，如果bucket开启版本控制，能看到同名文件的不同历史版本
-    static int Minio_UploadFile(IntPtr statePtr)
+    static int Minio_UploadFile(LuaState lua)
     {
-        var lua = LuaState.FromIntPtr(statePtr);
-        try
-        {
-            var bucketName = lua.ToString(1);
-            var srcPath = lua.ToString(2);
-            var tarPath = lua.ToString(3);
-            var result = instance.UploadFileAsync(bucketName, srcPath, tarPath).Result;
-            lua.PushInteger(result);
-            return 1;
-        }
-        catch (Exception e)
-        {
-            return lua.SharpLuaError(e);
-        }
+        var bucketName = lua.ToString(1);
+        var srcPath = lua.ToString(2);
+        var tarPath = lua.ToString(3);
+        var result = instance.UploadFileAsync(bucketName, srcPath, tarPath).Result;
+        lua.PushInteger(result);
+        return 1;
     }
 
-    static int Minio_UploadFileAsync(IntPtr statePtr)
+    static int Minio_UploadFileAsync(LuaState lua)
     {
-        var lua = LuaState.FromIntPtr(statePtr);
-        try
-        {
-            var bucketName = lua.ToString(1);
-            var srcPath = lua.ToString(2);
-            var tarPath = lua.ToString(3);
-            var task = instance.UploadFileAsync(bucketName, srcPath, tarPath);
-            lua.PushObject(task);
-            return 1;
-        }
-        catch (Exception e)
-        {
-            return lua.SharpLuaError(e);
-        }
+        var bucketName = lua.ToString(1);
+        var srcPath = lua.ToString(2);
+        var tarPath = lua.ToString(3);
+        var task = instance.UploadFileAsync(bucketName, srcPath, tarPath);
+        lua.PushObject(task);
+        return 1;
     }
 
     //功能：上传目录下所有文件（同名则直接替换）
     //lua调用示例: sharplua.Minio_UploadDirectory(bucketName, folderPath, searchPattern, searchTopDirOnly)
     //调用结果: 将folderPath下匹配到的所有文件，按文件路径上传
-    static int Minio_UploadDirectory(IntPtr statePtr)
+    static int Minio_UploadDirectory(LuaState lua)
     {
-        var lua = LuaState.FromIntPtr(statePtr);
-        try
+        var bucketName = lua.ToString(1);
+        var folderPath = lua.ToString(2);
+        var searchPattern = lua.ToString(3);
+        var searchTopDirOnly = lua.ToBoolean(4);
+        var errorCode = 0;
+        var files = Directory.EnumerateFiles(folderPath, searchPattern, searchTopDirOnly ? SearchOption.TopDirectoryOnly : SearchOption.AllDirectories);
+        if (files != null)
         {
-            var bucketName = lua.ToString(1);
-            var folderPath = lua.ToString(2);
-            var searchPattern = lua.ToString(3);
-            var searchTopDirOnly = lua.ToBoolean(4);
-            var errorCode = 0;
-            var files = Directory.EnumerateFiles(folderPath, searchPattern, searchTopDirOnly ? SearchOption.TopDirectoryOnly : SearchOption.AllDirectories);
-            if (files != null)
+            var batchTaskList = new List<Task<int>>();
+            foreach (var item in files)
             {
-                var batchTaskList = new List<Task<int>>();
-                foreach (var item in files)
+                var task = instance.UploadFileAsync(bucketName, item, item.Replace("\\", "/"));
+                batchTaskList.Add(task);
+            }
+            Task.WhenAll(batchTaskList).Wait();
+            foreach (var item in batchTaskList)
+            {
+                if (item.Result != 0)
                 {
-                    var task = instance.UploadFileAsync(bucketName, item, item.Replace("\\", "/"));
-                    batchTaskList.Add(task);
-                }
-                Task.WhenAll(batchTaskList).Wait();
-                foreach (var item in batchTaskList)
-                {
-                    if (item.Result != 0)
-                    {
-                        errorCode = item.Result;
-                        break;
-                    }
+                    errorCode = item.Result;
+                    break;
                 }
             }
-            lua.PushInteger(errorCode);
-            return 1;
         }
-        catch (Exception e)
-        {
-            return lua.SharpLuaError(e);
-        }
+        lua.PushInteger(errorCode);
+        return 1;
     }
 
     //功能：删除远端文件
     //lua调用示例: sharplua.Minio_DeleteFile(bucketName, tarPath)
     //调用结果: Minio远端会移除bucketName/tarPath
-    static int Minio_DeleteFile(IntPtr statePtr)
+    static int Minio_DeleteFile(LuaState lua)
     {
-        var lua = LuaState.FromIntPtr(statePtr);
-        try
-        {
-            var bucketName = lua.ToString(1);
-            var objName = lua.ToString(2);
-            var errorCode = instance.DeleteFileAsync(bucketName, objName).Result;
-            lua.PushInteger(errorCode);
-            return 1;
-        }
-        catch (Exception e)
-        {
-            return lua.SharpLuaError(e);
-        }
+        var bucketName = lua.ToString(1);
+        var objName = lua.ToString(2);
+        var errorCode = instance.DeleteFileAsync(bucketName, objName).Result;
+        lua.PushInteger(errorCode);
+        return 1;
     }
 
-    static int Minio_DeleteFileAsync(IntPtr statePtr)
+    static int Minio_DeleteFileAsync(LuaState lua)
     {
-        var lua = LuaState.FromIntPtr(statePtr);
-        try
-        {
-            var bucketName = lua.ToString(1);
-            var objName = lua.ToString(2);
-            var task = instance.DeleteFileAsync(bucketName, objName);
-            lua.PushObject(task);
-            return 1;
-        }
-        catch (Exception e)
-        {
-            return lua.SharpLuaError(e);
-        }
+        var bucketName = lua.ToString(1);
+        var objName = lua.ToString(2);
+        var task = instance.DeleteFileAsync(bucketName, objName);
+        lua.PushObject(task);
+        return 1;
     }
 
     //功能：下载文件
     //lua调用示例: sharplua.Minio_DownloadFile(bucketName, tarPath, filePath)
     //调用结果: 从远端的bucketName/tarPath下载文件到filePath
-    static int Minio_DownloadFile(IntPtr statePtr)
+    static int Minio_DownloadFile(LuaState lua)
     {
-        var lua = LuaState.FromIntPtr(statePtr);
-        try
-        {
-            var bucketName = lua.ToString(1);
-            var objName = lua.ToString(2);
-            var fileName = lua.ToString(3);
-            var result = instance.DownloadFileAsync(bucketName, objName, fileName).Result;
-            lua.PushInteger(result);
-            return 1;
-        }
-        catch (Exception e)
-        {
-            return lua.SharpLuaError(e);
-        }
+        var bucketName = lua.ToString(1);
+        var objName = lua.ToString(2);
+        var fileName = lua.ToString(3);
+        var result = instance.DownloadFileAsync(bucketName, objName, fileName).Result;
+        lua.PushInteger(result);
+        return 1;
     }
 
-    static int Minio_DownloadFileAsync(IntPtr statePtr)
+    static int Minio_DownloadFileAsync(LuaState lua)
     {
-        var lua = LuaState.FromIntPtr(statePtr);
-        try
-        {
-            var bucketName = lua.ToString(1);
-            var objName = lua.ToString(2);
-            var fileName = lua.ToString(3);
-            var task = instance.DownloadFileAsync(bucketName, objName, fileName);
-            lua.PushObject(task);
-            return 1;
-        }
-        catch (Exception e)
-        {
-            return lua.SharpLuaError(e);
-        }
+        var bucketName = lua.ToString(1);
+        var objName = lua.ToString(2);
+        var fileName = lua.ToString(3);
+        var task = instance.DownloadFileAsync(bucketName, objName, fileName);
+        lua.PushObject(task);
+        return 1;
     }
 
-    static int Minio_DownloadFileAll(IntPtr statePtr)
+    static int Minio_DownloadFileAll(LuaState lua)
     {
-        var lua = LuaState.FromIntPtr(statePtr);
-        try
-        {
-            //最大并发任务数
-            const int CoCurrentTaskCount = 8;
-            //当前任务数
-            var taskCount = 0L;
-            //任务数信号量
-            using var taskWaitEvent = new AutoResetEvent(false);
-            //存放任务结果的队列
-            var taskResultQueue = new Queue<(int, int)>(CoCurrentTaskCount);
+        //最大并发任务数
+        const int CoCurrentTaskCount = 8;
+        //当前任务数
+        var taskCount = 0L;
+        //任务数信号量
+        using var taskWaitEvent = new AutoResetEvent(false);
+        //存放任务结果的队列
+        var taskResultQueue = new Queue<(int, int)>(CoCurrentTaskCount);
 
-            bool ProcessTaskResult(ref int resultCode)
+        bool ProcessTaskResult(ref int resultCode)
+        {
+            var hasError = false;
+            while (true)
             {
-                var hasError = false;
-                while (true)
+                var cbRef = 0;
+                var cbResult = 0;
+                lock (taskResultQueue)
                 {
-                    var cbRef = 0;
-                    var cbResult = 0;
-                    lock (taskResultQueue)
-                    {
-                        if (taskResultQueue.Count == 0)
-                        {
-                            break;
-                        }
-                        var item = taskResultQueue.Dequeue();
-                        cbRef = item.Item1;
-                        cbResult = item.Item2;
-                    }
-                    lua.PushInteger(cbRef);
-                    lua.GetTable(KeraLua.LuaRegistry.Index);
-                    lua.PushInteger(cbResult);
-                    if (lua.PCall(1, 0, 0) != KeraLua.LuaStatus.OK)
-                    {
-                        hasError = true;
-                    }
-                    lua.Unref(KeraLua.LuaRegistry.Index, cbRef);
-                    if (cbResult != 0)
-                    {
-                        resultCode = cbResult;
-                    }
-                    //如果有错误则中断执行
-                    if (hasError)
+                    if (taskResultQueue.Count == 0)
                     {
                         break;
                     }
+                    var item = taskResultQueue.Dequeue();
+                    cbRef = item.Item1;
+                    cbResult = item.Item2;
                 }
-                return hasError;
-            }
-
-            //是否出现错误
-            var hasError = false;
-            //任务执行结果
-            int resultCode = 0;
-            while (true)
-            {
-                var top = lua.GetTop();
-                lua.PushCopy(1);
-                //当执行中出现错误时协程会被关闭，需要返回错误信息并停止循环
-                if (lua.PCall(0, 4, 0) != KeraLua.LuaStatus.OK)
+                lua.PushInteger(cbRef);
+                lua.GetTable(KeraLua.LuaRegistry.Index);
+                lua.PushInteger(cbResult);
+                if (lua.PCall(1, 0, 0) != KeraLua.LuaStatus.OK)
                 {
                     hasError = true;
+                }
+                lua.Unref(KeraLua.LuaRegistry.Index, cbRef);
+                if (cbResult != 0)
+                {
+                    resultCode = cbResult;
+                }
+                //如果有错误则中断执行
+                if (hasError)
+                {
                     break;
                 }
-                if (lua.IsNil(top + 1))
-                {
-                    //结束之前需要等待所有任务完成，然后执行结果回调方法
-                    while (Interlocked.Read(ref taskCount) > 0)
-                    {
-                        taskWaitEvent.WaitOne();
-                        if (ProcessTaskResult(ref resultCode))
-                        {
-                            hasError = true;
-                            break;
-                        }
-                    }
-                    break;
-                }
+            }
+            return hasError;
+        }
 
-                var bucketName = lua.ToString(top + 1);
-                var objName = lua.ToString(top + 2);
-                var fileName = lua.ToString(top + 3);
-                var cbRef = lua.Ref(KeraLua.LuaRegistry.Index);//pop 4th parameter
-                lua.Pop(3);
-                //开始下载任务，将结果放入队列
-                var task = instance.DownloadFileAsync(bucketName, objName, fileName);
-                task.ContinueWith(task =>
+        //是否出现错误
+        var hasError = false;
+        //任务执行结果
+        int resultCode = 0;
+        while (true)
+        {
+            var top = lua.GetTop();
+            lua.PushCopy(1);
+            //当执行中出现错误时协程会被关闭，需要返回错误信息并停止循环
+            if (lua.PCall(0, 4, 0) != KeraLua.LuaStatus.OK)
+            {
+                hasError = true;
+                break;
+            }
+            if (lua.IsNil(top + 1))
+            {
+                //结束之前需要等待所有任务完成，然后执行结果回调方法
+                while (Interlocked.Read(ref taskCount) > 0)
                 {
-                    var cbResult = task.Result;
-                    //多个任务同时操作结果队列，需要加锁
-                    lock (taskResultQueue)
-                    {
-                        taskResultQueue.Enqueue((cbRef, cbResult));
-                    }
-                    //任务完成，减少任务数，标记信号量
-                    Interlocked.Decrement(ref taskCount);
-                    taskWaitEvent.Set();
-                });
-
-                //任务数超过最大并发数则等待
-                if (Interlocked.Increment(ref taskCount) > CoCurrentTaskCount)
-                {
-                    //重置信号量，等待至少一个运行中的任务完成后标记信号量
                     taskWaitEvent.WaitOne();
+                    if (ProcessTaskResult(ref resultCode))
+                    {
+                        hasError = true;
+                        break;
+                    }
                 }
+                break;
+            }
 
-                //处理已完成的任务的结果，如果有错误则中断执行返回错误
-                if (ProcessTaskResult(ref resultCode))
+            var bucketName = lua.ToString(top + 1);
+            var objName = lua.ToString(top + 2);
+            var fileName = lua.ToString(top + 3);
+            var cbRef = lua.Ref(KeraLua.LuaRegistry.Index);//pop 4th parameter
+            lua.Pop(3);
+            //开始下载任务，将结果放入队列
+            var task = instance.DownloadFileAsync(bucketName, objName, fileName);
+            task.ContinueWith(task =>
+            {
+                var cbResult = task.Result;
+                //多个任务同时操作结果队列，需要加锁
+                lock (taskResultQueue)
                 {
-                    hasError = true;
-                    break;
+                    taskResultQueue.Enqueue((cbRef, cbResult));
                 }
+                //任务完成，减少任务数，标记信号量
+                Interlocked.Decrement(ref taskCount);
+                taskWaitEvent.Set();
+            });
+
+            //任务数超过最大并发数则等待
+            if (Interlocked.Increment(ref taskCount) > CoCurrentTaskCount)
+            {
+                //重置信号量，等待至少一个运行中的任务完成后标记信号量
+                taskWaitEvent.WaitOne();
             }
 
-            if (hasError)
+            //处理已完成的任务的结果，如果有错误则中断执行返回错误
+            if (ProcessTaskResult(ref resultCode))
             {
-                return lua.Error();
-            }
-            else
-            {
-                lua.PushInteger(resultCode);
-                return 1;
+                hasError = true;
+                break;
             }
         }
-        catch (Exception e)
+
+        if (hasError)
         {
-            return lua.SharpLuaError(e);
+            return lua.Error();
+        }
+        else
+        {
+            lua.PushInteger(resultCode);
+            return 1;
         }
     }
 
     //功能：返回所有bucket的集合，包含bucketName和bucket创建时间
     //lua调用示例: sharplua.Minio_ListBuckets()
-    static int Minio_ListBuckets(IntPtr statePtr)
+    static int Minio_ListBuckets(LuaState lua)
     {
-        var lua = LuaState.FromIntPtr(statePtr);
-        try
+        List<MinioListInfo> objList = instance.ListBucketAsync().Result;
+        if (objList != null && objList.Count > 0)
         {
-            List<MinioListInfo> objList = instance.ListBucketAsync().Result;
-            if (objList != null && objList.Count > 0)
+            lua.NewTable();
+            var index = 1;
+            foreach (var item in objList)
             {
+                lua.PushNumber(index++);
                 lua.NewTable();
-                var index = 1;
-                foreach (var item in objList)
-                {
-                    lua.PushNumber(index++);
-                    lua.NewTable();
-                    //k[1] = bucketName
-                    lua.PushNumber(1);
-                    lua.PushString(item.FileName);
-                    lua.SetTable(-3);
-                    //k[2] = timestamp
-                    lua.PushNumber(2);
-                    lua.PushInteger(item.DateTime.HasValue ? (long)(item.DateTime.Value - StartTimeUTC).TotalSeconds : 0);
-                    lua.SetTable(-3);
-                    lua.SetTable(-3);
-                }
+                //k[1] = bucketName
+                lua.PushNumber(1);
+                lua.PushString(item.FileName);
+                lua.SetTable(-3);
+                //k[2] = timestamp
+                lua.PushNumber(2);
+                lua.PushInteger(item.DateTime.HasValue ? (long)(item.DateTime.Value - StartTimeUTC).TotalSeconds : 0);
+                lua.SetTable(-3);
+                lua.SetTable(-3);
             }
-            else
-            {
-                lua.PushNil();
-            }
-            return 1;
         }
-        catch (Exception e)
+        else
         {
-            return lua.SharpLuaError(e);
+            lua.PushNil();
         }
+        return 1;
     }
 
     //功能：返回bucket下前缀匹配的文件列表，包含文件名、上次修改时间、文件大小等
-    static int Minio_ListFiles(IntPtr statePtr)
+    static int Minio_ListFiles(LuaState lua)
     {
-        var lua = LuaState.FromIntPtr(statePtr);
-        try
+        var bucketName = lua.ToString(1);
+        var prefix = lua.IsString(2) ? lua.ToString(2) : null;
+        var recursive = lua.IsBoolean(3) ? lua.ToBoolean(3) : false;
+        List<MinioListInfo> objList = instance.ListFileAsync(bucketName, prefix, recursive).Result;
+        if (objList != null && objList.Count > 0)
         {
-            var bucketName = lua.ToString(1);
-            var prefix = lua.IsString(2) ? lua.ToString(2) : null;
-            var recursive = lua.IsBoolean(3) ? lua.ToBoolean(3) : false;
-            List<MinioListInfo> objList = instance.ListFileAsync(bucketName, prefix, recursive).Result;
-            if (objList != null && objList.Count > 0)
+            lua.NewTable();
+            var index = 1;
+            foreach (var item in objList)
             {
+                lua.PushNumber(index++);
                 lua.NewTable();
-                var index = 1;
-                foreach (var item in objList)
-                {
-                    lua.PushNumber(index++);
-                    lua.NewTable();
-                    //k[1] = fileName
-                    lua.PushNumber(1);
-                    lua.PushString(item.FileName);
-                    lua.SetTable(-3);
-                    //k[2] = timestamp
-                    lua.PushNumber(2);
-                    lua.PushInteger(item.DateTime.HasValue ? (long)(item.DateTime.Value - StartTimeUTC).TotalSeconds : 0);
-                    lua.SetTable(-3);
-                    //k[3] = size
-                    lua.PushNumber(3);
-                    lua.PushInteger((long)item.Size);
-                    lua.SetTable(-3);
-                    lua.SetTable(-3);
-                }
+                //k[1] = fileName
+                lua.PushNumber(1);
+                lua.PushString(item.FileName);
+                lua.SetTable(-3);
+                //k[2] = timestamp
+                lua.PushNumber(2);
+                lua.PushInteger(item.DateTime.HasValue ? (long)(item.DateTime.Value - StartTimeUTC).TotalSeconds : 0);
+                lua.SetTable(-3);
+                //k[3] = size
+                lua.PushNumber(3);
+                lua.PushInteger((long)item.Size);
+                lua.SetTable(-3);
+                lua.SetTable(-3);
             }
-            else
-            {
-                lua.PushNil();
-            }
-            return 1;
         }
-        catch (Exception e)
+        else
         {
-            return lua.SharpLuaError(e);
+            lua.PushNil();
         }
+        return 1;
     }
 }
 

@@ -10,13 +10,12 @@ using LuaState = KeraLua.Lua;
 
 class SharpAPI_Process
 {
-
     private static int batchId = 0;
     private static Dictionary<int, BatchProcess> batchMap = new Dictionary<int, BatchProcess>();
 
     internal static void Register(LuaState lua)
     {
-        lua.SharpLuaRegistFunction(nameof(StartProcess), StartProcess);
+        lua.RegistSharpLuaFunction(nameof(StartProcess), StartProcess);
         lua.RegistSharpLuaFunction(nameof(CreateBatchProcess), CreateBatchProcess);
         lua.RegistSharpLuaFunction(nameof(AddBatchProcess), AddBatchProcess);
         lua.RegistSharpLuaFunction(nameof(RunBatchProcess), RunBatchProcess);
@@ -96,144 +95,116 @@ class SharpAPI_Process
         return new ProcessData(fileName, args, workingDir, redirectOutput, luaState, redirectFuncRef);
     }
 
-    static int CreateBatchProcess(IntPtr statePtr)
+    static int CreateBatchProcess(LuaState lua)
     {
-        var lua = LuaState.FromIntPtr(statePtr);
-        try
+        if (lua.IsFunction(1) == false)
         {
-            if (lua.IsFunction(1) == false)
-            {
-                lua.PushNil();
-                return 1;
-            }
-
-            int cbFuncRef = lua.Ref(LuaRegistry.Index);
-
-            batchId++;
-            BatchProcess batch = new BatchProcess(batchId, cbFuncRef);
-            batchMap.Add(batchId, batch);
-
-            lua.PushInteger(batchId);
+            lua.PushNil();
             return 1;
         }
-        catch (Exception e)
-        {
-            return lua.SharpLuaError(e);
-        }
+
+        int cbFuncRef = lua.Ref(LuaRegistry.Index);
+
+        batchId++;
+        BatchProcess batch = new BatchProcess(batchId, cbFuncRef);
+        batchMap.Add(batchId, batch);
+
+        lua.PushInteger(batchId);
+        return 1;
     }
 
-    static int AddBatchProcess(IntPtr statePtr)
+    static int AddBatchProcess(LuaState lua)
     {
-        var lua = LuaState.FromIntPtr(statePtr);
-        try
+        int batchId = (int)lua.ToInteger(1);
+        BatchProcess batch = null;
+        if (!batchMap.TryGetValue(batchId, out batch))
         {
-            int batchId = (int)lua.ToInteger(1);
-            BatchProcess batch = null;
-            if (!batchMap.TryGetValue(batchId, out batch))
-            {
-                lua.PushBoolean(false);
-                return 1;
-            }
-
-            var procData = CreateProcessData(lua, 1);
-            batch.procDataList.Add(procData);
-
-            var procIndex = batch.procDataList.Count;
-            lua.PushInteger(procIndex);
+            lua.PushBoolean(false);
             return 1;
         }
-        catch (Exception e)
-        {
-            return lua.SharpLuaError(e);
-        }
+
+        var procData = CreateProcessData(lua, 1);
+        batch.procDataList.Add(procData);
+
+        var procIndex = batch.procDataList.Count;
+        lua.PushInteger(procIndex);
+        return 1;
     }
 
     static int maxProcessNum = 32;
-    static int RunBatchProcess(IntPtr statePtr)
+    static int RunBatchProcess(LuaState lua)
     {
-        var lua = LuaState.FromIntPtr(statePtr);
+        var batchId = (int)lua.ToInteger(1);
+        BatchProcess batch = null;
+        if (!batchMap.TryGetValue(batchId, out batch))
+        {
+            lua.PushBoolean(false);
+            return 1;
+        }
+        var processDataList = batch.procDataList;
+        var cbFuncRef = batch.luaCallbackRef;
         try
         {
-            var batchId = (int)lua.ToInteger(1);
-            BatchProcess batch = null;
-            if (!batchMap.TryGetValue(batchId, out batch))
+            int len = Math.Min(maxProcessNum, processDataList.Count);
+            Task[] taskArray = new Task[len];
+            int[] taskIndexArray = new int[len];
+            for (int i = 0; i < len; i++)
             {
-                lua.PushBoolean(false);
-                return 1;
+                var processData = processDataList[i];
+                processData.StartProcess();
+                var task = processData.process.WaitForExitAsync();
+                taskArray[i] = task;
+                taskIndexArray[i] = i;
             }
-            var processDataList = batch.procDataList;
-            var cbFuncRef = batch.luaCallbackRef;
-            try
+            int runningIndex = len;
+            var hasExitCount = 0;
+            while (true)
             {
-                int len = Math.Min(maxProcessNum, processDataList.Count);
-                Task[] taskArray = new Task[len];
-                int[] taskIndexArray = new int[len];
-                for (int i = 0; i < len; i++)
+                if (runningIndex == processDataList.Count)
                 {
-                    var processData = processDataList[i];
-                    processData.StartProcess();
-                    var task = processData.process.WaitForExitAsync();
-                    taskArray[i] = task;
-                    taskIndexArray[i] = i;
-                }
-                int runningIndex = len;
-                var hasExitCount = 0;
-                while (true)
-                {
-                    if (runningIndex == processDataList.Count)
+                    Task.WaitAll(taskArray);
+                    for (int index = 0; index < taskArray.Length; index++)
                     {
-                        Task.WaitAll(taskArray);
-                        for (int index = 0; index < taskArray.Length; index++)
-                        {
-                            int processDataIndex = taskIndexArray[index];
-                            var processData = processDataList[processDataIndex];
-                            BatchCallback(lua, batchId, processDataIndex);
-                            hasExitCount++;
-                        }
-                    }
-                    else
-                    {
-                        int index = Task.WaitAny(taskArray);
-
                         int processDataIndex = taskIndexArray[index];
                         var processData = processDataList[processDataIndex];
                         BatchCallback(lua, batchId, processDataIndex);
-
-                        var newProcessData = processDataList[runningIndex];
-                        newProcessData.StartProcess();
-                        var task = newProcessData.process.WaitForExitAsync();
-                        taskArray[index] = task;
-                        taskIndexArray[index] = runningIndex;
-
-                        runningIndex++;
                         hasExitCount++;
                     }
-                    if (hasExitCount == processDataList.Count)
-                    {
-                        break;
-                    }
                 }
-
-                lua.PushBoolean(true);
-                return 1;
-            }
-            catch (Exception e)
-            {
-                return lua.SharpLuaError(e);
-            }
-            finally
-            {
-                lua.Unref(LuaRegistry.Index, cbFuncRef);
-                batchMap.Remove(batchId);
-                foreach (var processData in processDataList)
+                else
                 {
-                    processData?.Dispose();
+                    int index = Task.WaitAny(taskArray);
+
+                    int processDataIndex = taskIndexArray[index];
+                    var processData = processDataList[processDataIndex];
+                    BatchCallback(lua, batchId, processDataIndex);
+
+                    var newProcessData = processDataList[runningIndex];
+                    newProcessData.StartProcess();
+                    var task = newProcessData.process.WaitForExitAsync();
+                    taskArray[index] = task;
+                    taskIndexArray[index] = runningIndex;
+
+                    runningIndex++;
+                    hasExitCount++;
+                }
+                if (hasExitCount == processDataList.Count)
+                {
+                    break;
                 }
             }
+
+            lua.PushBoolean(true);
+            return 1;
         }
-        catch (Exception e)
+        finally
         {
-            return lua.SharpLuaError(e);
+            lua.Unref(LuaRegistry.Index, cbFuncRef);
+            batchMap.Remove(batchId);
+            foreach (var processData in processDataList)
+            {
+                processData?.Dispose();
+            }
         }
     }
 

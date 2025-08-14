@@ -4,7 +4,6 @@ using System;
 using System.IO;
 using System.Threading.Tasks;
 using System.Runtime.InteropServices;
-using System.Runtime.CompilerServices;
 using KeraLua;
 using LuaState = KeraLua.Lua;
 
@@ -167,14 +166,7 @@ static class SharpLua
         lua.SetTable(-3);
     }
 
-    public static void RegistSharpLuaFunction(this LuaState lua, string name, LuaFunction func)
-    {
-        lua.PushString(name);
-        lua.PushSharpLuaClosure(func);
-        lua.SetTable(-3);
-    }
-
-    public static void SharpLuaRegistFunction(this LuaState lua, string name, SharpLuaFunction func)
+    public static void RegistSharpLuaFunction(this LuaState lua, string name, SharpLuaFunction func)
     {
         lua.PushString(name);
         lua.PushSharpLuaClosure((IntPtr statePtr) =>
@@ -186,13 +178,13 @@ static class SharpLua
             }
             catch (Exception e)
             {
-                return lua.SharpLuaError(e);
+                return SharpLuaError(lua, e);
             }
         });
         lua.SetTable(-3);
     }
 
-    public static int SharpLuaError(this LuaState lua, Exception e)
+    static int SharpLuaError(LuaState lua, Exception e)
     {
         lua.PushString(e.ToString());
         return -1;
