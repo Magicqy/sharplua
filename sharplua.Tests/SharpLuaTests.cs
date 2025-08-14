@@ -110,11 +110,15 @@ public class LuaScriptTests
 
         try
         {
-            var workingDir = Path.GetDirectoryName(scriptPath);
+            var entryFile = Path.GetFullPath(scriptPath);
+            var workingDir = Path.GetDirectoryName(entryFile);
 
             var lua = SharpLua.SharpLua.SharpLuaNewState(workingDir);
 
-            var success = SharpLua.SharpLua.SharpLuaDoFile(lua, scriptPath, out var nResults);
+            // Register test extensions for testing purposes
+            TestExtensions.RegisterTestExtensions(lua);
+
+            var success = SharpLua.SharpLua.SharpLuaDoFile(lua, entryFile, out var nResults);
 
             if (!success)
             {

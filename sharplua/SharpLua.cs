@@ -25,6 +25,11 @@ static class SharpLua
 
     private static void AddPackagePath(LuaState lua, string searchPath)
     {
+        if (string.IsNullOrEmpty(searchPath))
+        {
+            return;
+        }
+
         lua.GetGlobal("package");
         var pkgIndex = lua.GetTop();
         var sepChar = Path.DirectorySeparatorChar;
@@ -81,7 +86,7 @@ static class SharpLua
             return EXIT_CODE_ERROR;
         }
 
-        var entryFile = args[0];
+        var entryFile = Path.GetFullPath(args[0]);
         if (!File.Exists(entryFile))
         {
             Console.Error.WriteLine("entry file not exists: {0}", entryFile);
@@ -124,7 +129,7 @@ static class SharpLua
     {
         if (workingDir != null)
         {
-            //设置工作路径，与当前运行的entry文件同级
+            //设置工作目录，应该使用entryFile所在目录
             Directory.SetCurrentDirectory(workingDir);
         }
 
@@ -141,9 +146,8 @@ static class SharpLua
     internal static bool SharpLuaDoFile(LuaState lua, string entryFilePath, out int nResults)
     {
         var top = lua.GetTop();
-        var entryFullPath = Path.GetFullPath(entryFilePath);
-        var entryBuffer = LoadLuaFile(entryFullPath);
-        var succ = lua.LoadBuffer(entryBuffer, entryFullPath) == LuaStatus.OK
+        var entryBuffer = LoadLuaFile(entryFilePath);
+        var succ = lua.LoadBuffer(entryBuffer, entryFilePath) == LuaStatus.OK
             && lua.PCall(0, LUA_MULTRET, 0) == LuaStatus.OK;
         nResults = lua.GetTop() - top;
         return succ;
