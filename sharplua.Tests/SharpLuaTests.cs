@@ -98,6 +98,24 @@ public class LuaScriptTests
         }
     }
 
+    [Fact]
+    public void Test_CSharpException_ShouldBeCaughtByLua()
+    {
+        // Arrange
+        var scriptPath = Path.Combine(_testLuaPath, "csharp-exception.lua");
+
+        // Act & Assert
+        var result = ExecuteLuaScript(scriptPath);
+        if (!result.Success && result.IsAssertionFailure)
+        {
+            Assert.True(result.Success, $"Assertion failed in Lua script: {result.AssertionDetails}");
+        }
+        else
+        {
+            Assert.True(result.Success, $"C# exception test failed: {result.ErrorMessage}");
+        }
+    }
+
     /// <summary>
     /// 执行Lua脚本并返回结果
     /// </summary>
