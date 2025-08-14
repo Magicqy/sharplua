@@ -272,7 +272,7 @@ static class SharpAPI_Minio
 
         if (hasError)
         {
-            return lua.Error();
+            return lua.SharpLuaError();
         }
         else
         {

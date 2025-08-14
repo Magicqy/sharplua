@@ -40,7 +40,7 @@ class SharpAPI_LuaState
         else
         {
             state.XMove(lua, 1);
-            return lua.Error();
+            return lua.SharpLuaError();
         }
     }
 
@@ -63,7 +63,7 @@ class SharpAPI_LuaState
         else
         {
             state.XMove(lua, 1);
-            return lua.Error();
+            return lua.SharpLuaError();
         }
     }
 }

@@ -158,7 +158,7 @@ static class SharpAPI_Task
 
         if (hasError)
         {
-            return lua.Error();
+            return lua.SharpLuaError();
         }
         else
         {

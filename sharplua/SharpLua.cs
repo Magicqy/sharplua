@@ -280,6 +280,13 @@ static class SharpLua
 static class SharpLuaExt
 {
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static int SharpLuaError(this LuaState lua)
+    {
+        //error already pushed to stack
+        return -1;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static int SharpLuaError(this LuaState lua, Exception e)
     {
         return lua.SharpLuaError(e.ToString());
